@@ -9,7 +9,7 @@ import (
 
 // DependencyError 代表依賴檢查失敗的錯誤
 type DependencyError struct {
-	Component string // 元件名稱 (e.g., "Node.js", "GitHub Copilot CLI", "GitHub CLI")
+	Component string // 元件名稱 (e.g., "GitHub Copilot CLI", "GitHub Auth")
 	Message   string // 錯誤訊息
 	Help      string // 幫助文本
 }
@@ -33,11 +33,9 @@ func NewDependencyChecker() *DependencyChecker {
 
 // CheckAll 檢查所有必需的依賴項
 func (dc *DependencyChecker) CheckAll() error {
-	// 注意: Node.js 不再是必須的,因為 copilot CLI 可以通過 winget/brew 安裝
-	// 但如果存在,仍然檢查版本
-	dc.CheckGitHubCopilotCLI() // 優先檢查 Copilot CLI
-	dc.CheckGitHubCLI()
-	dc.CheckGitHubAuth()
+	// 注意: 新版獨立 Copilot CLI 不需要 gh CLI 或 Node.js
+	dc.CheckGitHubCopilotCLI() // 檢查獨立 Copilot CLI
+	dc.CheckGitHubAuth()       // 檢查認證狀態
 
 	if len(dc.errors) > 0 {
 		return dc.formatErrors()
@@ -45,7 +43,7 @@ func (dc *DependencyChecker) CheckAll() error {
 	return nil
 }
 
-// CheckNodeJS 檢查 Node.js 是否已安裝
+// CheckNodeJS 檢查 Node.js 是否已安裝（可選，新版 CLI 不需要）
 func (dc *DependencyChecker) CheckNodeJS() {
 	cmd := exec.Command("node", "--version")
 	output, err := cmd.Output()
@@ -71,41 +69,76 @@ func (dc *DependencyChecker) CheckNodeJS() {
 }
 
 // CheckGitHubCopilotCLI 檢查 GitHub Copilot CLI 是否已安裝
+//
+// 版本說明 (2026-01-21 更新)：
+//   - 本專案使用 **新版獨立** GitHub Copilot CLI (`copilot` 命令)
+//   - 安裝方式：`winget install GitHub.Copilot` 或 `npm install -g @github/copilot`
+//   - **舊版 `gh copilot` 已於 2025-10-25 停用**
+//   - **`@githubnext/github-copilot-cli` 早已棄用**
+//   - 詳見 VERSION_NOTICE.md
 func (dc *DependencyChecker) CheckGitHubCopilotCLI() {
 	cmd := exec.Command("copilot", "--version")
 	_, err := cmd.Output()
 	if err != nil {
 		dc.errors = append(dc.errors, &DependencyError{
 			Component: "GitHub Copilot CLI",
-			Message:   "未找到 copilot CLI,請先安裝",
-			Help:      "運行以下其中一個指令:\n   - Windows: winget install GitHub.Copilot\n   - macOS/Linux: brew install copilot-cli\n   - 跨平台: npm install -g @github/copilot\n   更多資訊: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli",
+			Message:   "未找到 copilot 命令",
+			Help: `請安裝新版獨立 GitHub Copilot CLI：
+
+   Windows (Winget):
+      winget install GitHub.Copilot
+
+   macOS/Linux (Homebrew):
+      brew install copilot-cli
+
+   npm (全平台):
+      npm install -g @github/copilot
+
+   macOS/Linux (Install Script):
+      curl -fsSL https://gh.io/copilot-install | bash
+
+   安裝後執行 'copilot --version' 驗證。
+
+   ⚠️ 注意：
+   - 舊版 'gh copilot' 已於 2025-10-25 停用
+   - 舊版 '@githubnext/github-copilot-cli' 已棄用
+   - 詳見 VERSION_NOTICE.md`,
 		})
 		return
 	}
 }
 
-// CheckGitHubCLI 檢查 GitHub CLI 是否已安裝
+// CheckGitHubCLI 檢查 GitHub CLI 是否已安裝（可選，新版 CLI 不需要）
 func (dc *DependencyChecker) CheckGitHubCLI() {
 	cmd := exec.Command("gh", "--version")
 	_, err := cmd.Output()
 	if err != nil {
 		dc.errors = append(dc.errors, &DependencyError{
 			Component: "GitHub CLI",
-			Message:   "未找到 GitHub CLI (gh)，請先安裝",
-			Help:      "訪問 https://cli.github.com/ 下載安裝程式",
+			Message:   "未找到 GitHub CLI (gh)，請先安裝（可選）",
+			Help:      "訪問 https://cli.github.com/ 下載安裝程式（新版 Copilot CLI 不需要此依賴）",
 		})
 	}
 }
 
 // CheckGitHubAuth 檢查 GitHub 認證狀態
 func (dc *DependencyChecker) CheckGitHubAuth() {
+	// 新版 CLI 使用自己的認證機制，先嘗試 gh auth，如失敗則提示使用 copilot /login
 	cmd := exec.Command("gh", "auth", "status")
 	_, err := cmd.CombinedOutput()
 	if err != nil {
+		// gh 認證失敗不一定是問題，因為新版 CLI 有自己的認證
+		// 這裡只是警告，不阻止執行
 		dc.errors = append(dc.errors, &DependencyError{
 			Component: "GitHub Auth",
-			Message:   "未認證或認證已過期",
-			Help:      "運行: gh auth login -w (使用瀏覽器認證)",
+			Message:   "GitHub CLI 未認證（新版 Copilot CLI 可使用自己的認證）",
+			Help: `認證方式：
+
+   方法 1: 使用新版 Copilot CLI 認證（推薦）
+      執行 'copilot' 然後輸入 '/login'
+
+   方法 2: 使用 GitHub CLI 認證
+      執行 'gh auth login -w'（使用瀏覽器認證）`,
 		})
 	}
 }

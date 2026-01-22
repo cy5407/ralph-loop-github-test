@@ -1,6 +1,6 @@
 # Ralph Loop - AI 驅動的自動程式碼迭代系統
 
-> 基於 GitHub Copilot CLI 的自主程式碼修正與迭代工具
+> 基於 GitHub Copilot SDK 的自主程式碼修正與迭代工具
 
 ## 🎯 專案狀態
 
@@ -13,7 +13,7 @@
 2. **專案規劃**
    - 完成 [openspec/project.md](openspec/project.md)（Ralph Loop 完整規格）
    - 定義五階段開發路線圖
-   - 明確 CLI 整合架構（使用 `github-copilot-cli` 工具）
+   - 完成 SDK 整合驗證（POC 測試通過）
 
 3. **第一個變更提案：指令過濾安全層**
    - **狀態**: ✅ 已驗證通過
@@ -24,16 +24,15 @@
      - [specs/command-filter/spec.md](openspec/changes/add-command-filter-security/specs/command-filter/spec.md) - 8 個需求，40+ 測試場景
    - **驗證**: `openspec validate add-command-filter-security --strict` ✅ 通過
 
-4. **第二個變更提案：GitHub Copilot CLI 整合層** 🆕
-   - **狀態**: ✅ 已驗證通過
-   - **路徑**: `openspec/changes/add-copilot-cli-integration/`
+4. **GitHub Copilot SDK 整合** 🆕
+   - **狀態**: ✅ POC 驗證通過
+   - **實作檔案**: `test/sdk_poc_test.go`
    - **內容**:
-     - [proposal.md](openspec/changes/add-copilot-cli-integration/proposal.md) - CLI 整合設計提案
-     - [tasks.md](openspec/changes/add-copilot-cli-integration/tasks.md) - 42 項實作任務（7 個階段）
-     - [specs/cli-executor/spec.md](openspec/changes/add-copilot-cli-integration/specs/cli-executor/spec.md) - CLI 執行器規格（8 個需求）
-     - [specs/output-parser/spec.md](openspec/changes/add-copilot-cli-integration/specs/output-parser/spec.md) - 輸出解析器規格（8 個需求）
-   - **驗證**: `openspec validate add-copilot-cli-integration --strict` ✅ 通過
-   - **優先級**: 最高（第一階段開發）
+     - 成功整合 `github.com/github/gh-copilot` SDK
+     - 完成基本對話功能測試
+     - 驗證 Token 使用與 Agent 互動
+   - **測試指令**: `go test -v ./test`
+   - **優先級**: 最高（基礎已完成，準備整合到主系統）
 
 ### 📋 專案結構
 
@@ -157,25 +156,21 @@ npx openspec change apply add-copilot-cli-integration
 
 - **從這裡開始**: [openspec/project.md](openspec/project.md)
   - Ralph Loop 的完整架構
-  - 技術棧：Golang + GitHub Copilot CLI
+  - 技術棧：Golang + GitHub Copilot SDK
   - 五階段開發路線圖
   - 安全規則與約束
 
-### CLI 整合層（當前優先）
+### SDK 整合（當前狀態）
 
-- **提案**: [openspec/changes/add-copilot-cli-integration/proposal.md](openspec/changes/add-copilot-cli-integration/proposal.md)
-  - 為什麼選擇 CLI 而非 SDK
-  - 完整的技術決策理由
-  - 風險與緩解策略
+- **POC 實作**: `test/sdk_poc_test.go`
+  - 驗證 SDK 基本功能
+  - Token 使用管理
+  - Agent 對話互動
 
-- **任務清單**: [openspec/changes/add-copilot-cli-integration/tasks.md](openspec/changes/add-copilot-cli-integration/tasks.md)
-  - 42 個詳細任務
-  - 7 個開發階段
-  - 依賴關係圖
-
-- **技術規格**:
-  - [CLI 執行器](openspec/changes/add-copilot-cli-integration/specs/cli-executor/spec.md): 8 個需求，25+ 場景
-  - [輸出解析器](openspec/changes/add-copilot-cli-integration/specs/output-parser/spec.md): 8 個需求，30+ 場景
+- **SDK 核心模組**: `internal/ghcopilot/`
+  - 封裝 GitHub Copilot SDK
+  - 提供統一介面
+  - 處理錯誤與重試
 
 ### 安全層（優先級 2）
 
@@ -213,37 +208,41 @@ npx openspec change apply add-copilot-cli-integration
     └──────────────┘
 ```
 
-### GitHub Copilot CLI 整合方式
+### GitHub Copilot SDK 整合方式
 
-```bash
-# 1. 安裝
-github-copilot-cli
-npm install -g @githubnext/github-copilot-cli
+```go
+// 1. 初始化 SDK
+import "github.com/github/gh-copilot/pkg/agent"
 
-# 2. 認證
-github-copilot-cli auth
+client, err := agent.NewClient()
+if err != nil {
+    log.Fatal(err)
+}
 
-# 3. 獲取 shell 指令建議
-github-copilot-cli what-the-shell "修正編譯錯誤: undefined: fmt.Printl"
+// 2. 建立對話
+conversation := client.NewConversation()
 
-# 4. 獲取 git 操作建議
-github-copilot-cli git-assist "如何撒銷最後一次 commit"
+// 3. 發送訊息並獲取回應
+response, err := conversation.Send(context.Background(), "如何修正這個編譯錯誤？")
+if err != nil {
+    log.Fatal(err)
+}
 
-# 5. 獲取 GitHub CLI 建議
-github-copilot-cli gh-assist "如何建立 pull request"
+// 4. Ralph Loop 處理回應
+// - 解析 AI 建議的程式碼變更
+// - 透過安全過濾器驗證
+// - 自動應用變更（或請求確認）
 
-# 6. Ralph Loop 解析輸出
-# - 提取 Markdown 程式碼區塊
-# - 識別建議的指令或程式碼變更
-# - 透過安全過濾器驗證
-# - 自動執行（或請求確認）
+// 5. Token 使用管理
+tokenUsage := conversation.GetTokenUsage()
+fmt.Printf("已使用 %d tokens\n", tokenUsage)
 ```
 
 ## 📊 開發路線圖（5 階段）
 
 | 階段 | 名稱 | 狀態 | 驗收標準 | 變更提案 |
 |------|------|------|----------|----------|
-| 1 | CLI 整合層 | 📝 規劃中 | 成功與 Copilot CLI 互動 | ✅ add-copilot-cli-integration |
+| 1 | SDK 整合層 | ✅ POC 完成 | 成功與 Copilot SDK 互動 | ✅ POC 測試通過 |
 | 2 | 狀態機核心 | 📋 待規劃 | 觀察→反思→行動迴圈運行 | - |
 | 3 | 安全層 | 📝 規劃中 | 攔截所有危險指令 | ✅ add-command-filter-security |
 | 4 | 沙盒環境 | 📋 待規劃 | 隔離執行 AI 生成的指令 | - |

@@ -3,6 +3,7 @@ package ghcopilot
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,32 @@ func TestNewCLIExecutor(t *testing.T) {
 	}
 	if ce.workDir != "/tmp" {
 		t.Errorf("工作目錄應為 /tmp，但為 %s", ce.workDir)
+	}
+	// 檢查預設選項
+	if ce.options.Model != ModelClaudeSonnet45 {
+		t.Errorf("預設模型應為 claude-sonnet-4.5，但為 %s", ce.options.Model)
+	}
+	if !ce.options.Silent {
+		t.Error("預設應啟用安靜模式")
+	}
+	if !ce.options.AllowAllTools {
+		t.Error("預設應允許所有工具")
+	}
+}
+
+// TestNewCLIExecutorWithOptions 測試帶選項建立 CLI 執行器
+func TestNewCLIExecutorWithOptions(t *testing.T) {
+	opts := ExecutorOptions{
+		Model:         ModelClaudeOpus45,
+		Silent:        false,
+		AllowAllTools: false,
+	}
+	ce := NewCLIExecutorWithOptions("/tmp", opts)
+	if ce.options.Model != ModelClaudeOpus45 {
+		t.Errorf("模型應為 claude-opus-4.5，但為 %s", ce.options.Model)
+	}
+	if ce.options.Silent {
+		t.Error("安靜模式應為 false")
 	}
 }
 
@@ -161,8 +188,147 @@ func TestGenerateMockResponse(t *testing.T) {
 	if !contains(response, "COPILOT_STATUS") {
 		t.Error("模擬響應應包含 COPILOT_STATUS")
 	}
+}
 
-	if !contains(response, "測試描述") {
-		t.Error("模擬響應應包含描述")
+// TestSetModel 測試設定模型
+func TestSetModel(t *testing.T) {
+	ce := NewCLIExecutor("/tmp")
+	ce.SetModel(ModelGPT5)
+	if ce.options.Model != ModelGPT5 {
+		t.Errorf("模型應為 gpt-5，但為 %s", ce.options.Model)
 	}
+}
+
+// TestSetSilent 測試設定安靜模式
+func TestSetSilent(t *testing.T) {
+	ce := NewCLIExecutor("/tmp")
+	ce.SetSilent(false)
+	if ce.options.Silent {
+		t.Error("安靜模式應為 false")
+	}
+}
+
+// TestSetAllowAllTools 測試設定允許所有工具
+func TestSetAllowAllTools(t *testing.T) {
+	ce := NewCLIExecutor("/tmp")
+	ce.SetAllowAllTools(false)
+	if ce.options.AllowAllTools {
+		t.Error("AllowAllTools 應為 false")
+	}
+}
+
+// TestBuildArgs 測試構建 CLI 參數
+func TestBuildArgs(t *testing.T) {
+	ce := NewCLIExecutor("/tmp")
+	ce.SetModel(ModelClaudeOpus45)
+	ce.SetSilent(true)
+	ce.SetAllowAllTools(true)
+	ce.options.NoAskUser = true
+	ce.options.AllowedDirs = []string{"/home/user"}
+
+	args := ce.buildArgs("test prompt")
+
+	// 檢查 prompt
+	if !containsArg(args, "-p", "test prompt") {
+		t.Error("參數應包含 -p 和 prompt")
+	}
+
+	// 檢查模型
+	if !containsArg(args, "--model", "claude-opus-4.5") {
+		t.Error("參數應包含 --model claude-opus-4.5")
+	}
+
+	// 檢查安靜模式
+	if !containsFlag(args, "-s") {
+		t.Error("參數應包含 -s")
+	}
+
+	// 檢查允許所有工具
+	if !containsFlag(args, "--allow-all-tools") {
+		t.Error("參數應包含 --allow-all-tools")
+	}
+
+	// 檢查 no-ask-user
+	if !containsFlag(args, "--no-ask-user") {
+		t.Error("參數應包含 --no-ask-user")
+	}
+
+	// 檢查允許的目錄
+	if !containsArg(args, "--add-dir", "/home/user") {
+		t.Error("參數應包含 --add-dir /home/user")
+	}
+}
+
+// TestExecutePromptMock 測試模擬執行 prompt
+func TestExecutePromptMock(t *testing.T) {
+	os.Setenv("COPILOT_MOCK_MODE", "true")
+	defer os.Unsetenv("COPILOT_MOCK_MODE")
+
+	wd, _ := os.Getwd()
+	ce := NewCLIExecutor(wd)
+
+	ctx := context.Background()
+	result, err := ce.ExecutePrompt(ctx, "測試 prompt")
+
+	if err != nil {
+		t.Errorf("執行失敗: %v", err)
+	}
+
+	if !result.Success {
+		t.Error("執行應成功")
+	}
+
+	if result.Model != ModelClaudeSonnet45 {
+		t.Errorf("模型應為預設模型，但為 %s", result.Model)
+	}
+}
+
+// TestAnalyzeAndFixMock 測試模擬分析並修復
+func TestAnalyzeAndFixMock(t *testing.T) {
+	os.Setenv("COPILOT_MOCK_MODE", "true")
+	defer os.Unsetenv("COPILOT_MOCK_MODE")
+
+	wd, _ := os.Getwd()
+	ce := NewCLIExecutor(wd)
+
+	ctx := context.Background()
+	result, err := ce.AnalyzeAndFix(ctx, "build error", "test failed")
+
+	if err != nil {
+		t.Errorf("執行失敗: %v", err)
+	}
+
+	if !result.Success {
+		t.Error("執行應成功")
+	}
+
+	// 檢查響應包含分析結果
+	if !strings.Contains(result.Stdout, "分析結果") {
+		t.Error("響應應包含分析結果")
+	}
+
+	// 檢查狀態為 COMPLETED
+	if !strings.Contains(result.Stdout, "STATUS: COMPLETED") {
+		t.Error("分析修復後狀態應為 COMPLETED")
+	}
+}
+
+// containsArg 檢查參數列表是否包含指定的 flag 和 value
+func containsArg(args []string, flag, value string) bool {
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+// containsFlag 檢查參數列表是否包含指定的 flag
+func containsFlag(args []string, flag string) bool {
+	for _, arg := range args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
 }

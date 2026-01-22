@@ -38,3 +38,13 @@ Thumbs.db
 # 臨時檔案
 *.tmp
 *.temp
+
+# 狀態文件
+.call_count
+.circuit_breaker_history
+.circuit_breaker_state
+.claude_session_id
+.last_reset
+.response_analysis
+progress.json
+status.json
