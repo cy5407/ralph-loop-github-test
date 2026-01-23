@@ -1,6 +1,6 @@
 # Ralph Loop - AI 驅動的自動程式碼迭代系統
 
-> 基於 GitHub Copilot SDK 的自主程式碼修正與迭代工具
+> 基於 GitHub Copilot SDK 的自主程式碼修正與迭代工具 (這是我用Vibe coding 出來的AI小垃圾)
 
 ## 🎯 專案概述
 
